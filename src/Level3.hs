@@ -24,12 +24,17 @@ class Functor f => Monoidal (f :: Type -> Type) where
 
 infixl 4 *&*
 
-todoImpl ''Monoidal ''Maybe
+instance Monoidal Maybe where
+  unit = Just ()
+  a *&* b = liftA2 (,) a b
 
-todoImpl ''Monoidal ''(->)
+instance Monoidal ((->) a) where
+  unit = const ()
+  a *&* b = \x -> (a x, b x)
 
-todoImpl ''Monoidal ''(,)
-
+instance Monoid a => Monoidal ((,) a) where
+  unit = (mempty, ())
+  (e1, a) *&* (e2, b) = (e1 <> e2, (a, b))
 
 -- 3.2. Эквивалентность интерфейсов.
 --
@@ -40,17 +45,22 @@ todoImpl ''Monoidal ''(,)
 newtype ApplicativeMonoidal f a = ApplicativeMonoidal { runAM :: f a }
   deriving (Eq, Show)
 
-todoImpl ''Functor ''ApplicativeMonoidal
+instance Functor f => Functor (ApplicativeMonoidal f) where
+  fmap f (ApplicativeMonoidal x) = ApplicativeMonoidal $ fmap f x
 
-todoImpl ''Monoidal ''ApplicativeMonoidal
+instance Applicative f => Monoidal (ApplicativeMonoidal f) where
+  unit = ApplicativeMonoidal $ pure ()
+  ApplicativeMonoidal a *&* ApplicativeMonoidal b = ApplicativeMonoidal $ liftA2 (,) a b
 
 newtype MonoidalApplicative f a = MonoidalApplicative { runMA :: f a }
   deriving (Eq, Show)
 
-todoImpl ''Functor ''MonoidalApplicative
+instance Functor f => Functor (MonoidalApplicative f) where
+  fmap f (MonoidalApplicative x) = MonoidalApplicative $ fmap f x
 
-todoImpl ''Applicative ''MonoidalApplicative
-
+instance Monoidal f => Applicative (MonoidalApplicative f) where
+  pure x = MonoidalApplicative $ const x <$> unit
+  MonoidalApplicative f <*> MonoidalApplicative a = MonoidalApplicative $ (uncurry ($)) <$> (f *&* a)
 
 -- 3.3. Сложение на консоли.
 --
@@ -68,8 +78,7 @@ todoImpl ''Applicative ''MonoidalApplicative
 -- Написанную программу можно запустить командой make run.
 
 summerAppMain :: MyIO ()
-summerAppMain = todo "3.3"
-
+summerAppMain = join $ writeInt <$> ((+) <$> readInt <*> readInt)
 
 -- 3.4. Композиция MyIO и Maybe.
 --
@@ -84,4 +93,6 @@ summerAppMain = todo "3.3"
 type App = Compose MyIO Maybe
 
 sumN :: Int -> App Int
-sumN = todo "3.4"
+sumN n = if n <= 0
+  then pure 0
+  else (+) <$> Compose readIntMaybe <*> sumN (n-1)
