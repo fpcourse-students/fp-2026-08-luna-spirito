@@ -5,6 +5,7 @@ import Control.Applicative (ZipList (..))
 import Examples qualified as E
 import Level1 (Player (..))
 import MetaUtils (todo, todoImpl)
+import Data.Foldable (maximumBy)
 
 
 -- 2.1. Точка в многомерном пространстве.
@@ -22,13 +23,14 @@ import MetaUtils (todo, todoImpl)
 -- Законы Applicative и их имена — в лекции 8, слайд 23.
 
 identityCounterexample :: [Int]
-identityCounterexample = todo "2.1 Identity"
+identityCounterexample = [1, 2]
 
 newtype PointN a = PointN { getPointN :: [a] }
   deriving (Eq, Show, Functor)
 
-todoImpl ''Applicative ''PointN
-
+instance Applicative PointN where
+  pure x = PointN $ repeat x
+  PointN f <*> PointN a = PointN $ zipWith ($) f a
 
 -- 2.2. Точка с произвольными индексами.
 --
@@ -44,10 +46,12 @@ pointIExample = PointI $ \case
   "y" -> 4
   unknown -> error $ "Unexpected component index: " <> unknown
 
-todoImpl ''Functor ''PointI
+instance Functor (PointI s) where
+  fmap f (PointI a) = PointI $ f . a
 
-todoImpl ''Applicative ''PointI
-
+instance Applicative (PointI s) where
+  pure x = PointI \_ -> x
+  PointI f <*> PointI a = PointI \x -> f x (a x)
 
 -- 2.3. Композиция аппликативных функторов.
 --
@@ -66,10 +70,12 @@ todoImpl ''Applicative ''PointI
 newtype Compose f g a = Compose { getCompose :: f (g a) }
   deriving (Eq, Show)
 
-todoImpl ''Functor ''Compose
+instance (Functor f, Functor g) => Functor (Compose f g) where
+  fmap f (Compose a) = Compose $ fmap (fmap f)  a
 
-todoImpl ''Applicative ''Compose
-
+instance (Applicative f, Applicative g) => Applicative (Compose f g) where
+  pure = Compose . pure . pure
+  Compose f <*> Compose a = Compose $ liftA2 (<*>) f a
 
 -- 2.4. Сравнение бинарных функций.
 --
@@ -81,8 +87,14 @@ todoImpl ''Applicative ''Compose
 type Walkable a = (Enum a, Bounded a)
 
 sameBinary :: (Walkable a, Walkable b, Eq c) => (a -> b -> c) -> (a -> b -> c) -> Bool
-sameBinary = todo "2.4"
-
+sameBinary f g =
+  let inputs = ZipList $ (,) <$> [minBound..maxBound] <*> [minBound..maxBound]
+  in all id $ getZipList $ liftA2 (==) (uncurry f <$> inputs) (uncurry g <$> inputs)
+-- Но по мне так проще:
+-- sameBinary f g = all id do
+--   a <- [minBound..maxBound]
+--   b <- [minBound..maxBound]
+--   pure $ f a b == g a b
 
 -- 2.5. Разное: лучший игрок.
 --
@@ -92,4 +104,12 @@ sameBinary = todo "2.4"
 -- Способ решения выберите сами.
 
 bestPlayer :: [Player] -> Maybe Player
-bestPlayer = todo "2.5"
+bestPlayer = \case
+  [] -> Nothing
+  x:xs -> Just $ go x xs where
+    go x  = \case
+      [] -> x
+      y:ys ->
+        if playerScore x < playerScore y
+          then go y ys
+          else go x ys
